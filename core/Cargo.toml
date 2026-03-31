@@ -1,0 +1,25 @@
+[package]
+name = "veilpdf-core"
+version = "1.0.0"
+edition = "2021"
+license = "MIT"
+description = "Privacy-first PDF manipulation library — merge, split, compress. Your PDFs never leave."
+repository = "https://github.com/pyveil/veilpdf-core"
+keywords = ["pdf", "merge", "split", "compress", "privacy"]
+categories = ["document-processing"]
+
+[lib]
+name = "veilpdf_core"
+crate-type = ["lib", "staticlib"]
+
+[dependencies]
+lopdf = { version = "0.34", default-features = false, features = ["nom_parser"] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+flate2 = "1"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = "symbols"
+panic = "unwind"
