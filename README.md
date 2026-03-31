@@ -53,7 +53,7 @@ This is the engine behind [VeilPDF](https://veilpdf.com), a native macOS app wit
 
 ```toml
 [dependencies]
-veilpdf-core = { git = "https://github.com/iMADDDDDD/veilpdf" }
+veilpdf-core = { git = "https://github.com/iMADDDDDD/veilpdf-core" }
 ```
 
 ```rust
