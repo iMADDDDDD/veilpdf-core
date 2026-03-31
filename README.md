@@ -53,7 +53,7 @@ This is the engine behind [VeilPDF](https://veilpdf.com), a native macOS app wit
 
 ```toml
 [dependencies]
-veilpdf-core = { git = "https://github.com/iMADDDDDD/veilpdf-core" }
+veilpdf-core = { git = "https://github.com/iMADDDDDD/veilpdf" }
 ```
 
 ```rust
@@ -176,7 +176,16 @@ cargo doc --open         # Generate docs
 
 ## The macOS app
 
-This library powers [VeilPDF](https://veilpdf.com) — a native macOS app with 47 PDF tools built on SwiftUI and PDFKit. The app is a one-time $29 purchase on the Mac App Store. The app source is proprietary; this repo contains only the open-source Rust engine.
+This library powers [VeilPDF](https://veilpdf.com) — a native macOS app with 47 PDF tools, available as a one-time $29 purchase on the Mac App Store.
+
+This repo contains the Rust engine that handles byte-level PDF operations — the part where your raw document data is processed. This is the code you'd want to audit if you care about privacy. The macOS app adds 42 additional tools built on Apple's PDFKit, Core Image, and WebKit frameworks:
+
+- **PDFKit** — page organization, rotation, annotations, form filling, signatures, stamps, watermarks, page numbers, passwords, permissions, bookmarks, metadata, flattening, comparing, repair
+- **Core Image** — contrast adjustment, scanner effect, color replacement
+- **WebKit** — HTML to PDF conversion
+- **NSAttributedString** — Markdown to PDF conversion
+
+The app source is proprietary — the open-source core is the trust layer that proves your files stay local.
 
 ## Contributing
 
