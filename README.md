@@ -9,11 +9,12 @@
 </p>
 
 <p align="center">
-  Merge, split, compress, sanitize, and extract images from PDFs.<br>
-  Zero network dependencies. Auditable Rust. MIT licensed.
+  Merge &middot; Split &middot; Compress &middot; Sanitize &middot; Extract<br>
+  <sub>Pure Rust &middot; Under 2,000 lines &middot; MIT licensed</sub>
 </p>
 
 <p align="center">
+  <a href="https://github.com/iMADDDDDD/veilpdf-core/actions/workflows/ci.yml"><img src="https://github.com/iMADDDDDD/veilpdf-core/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
   <a href="LICENSE-MIT"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/rust-1.75%2B-orange.svg" alt="Rust: 1.75+">
   <img src="https://img.shields.io/badge/network-zero-brightgreen.svg" alt="Network: zero">
@@ -22,34 +23,41 @@
 
 ---
 
-## Why?
+## At a glance
+
+- **Zero networking.** No `reqwest`, no `hyper`, no sockets. Cannot phone home by construction.
+- **Three dependencies.** `lopdf`, `image`, `flate2`. No async runtime, no TLS, no serialization framework.
+- **Under 2,000 lines.** An afternoon to read the entire codebase end to end.
+- **Hostile-input safe.** Encrypted PDFs rejected, zip bombs capped, megapixel-bombed images rejected, FFI panics contained.
+- **Rust + C ABI.** Use as a Rust crate or link the static `.a` from Swift, Objective-C, or C.
+
+## Why
 
 Most PDF libraries pull in HTTP clients, async runtimes, or cloud SDKs. If you're processing sensitive documents — tax returns, contracts, medical records — that's a liability.
 
-`veilpdf-core` has **zero networking dependencies**. No `reqwest`, no `hyper`, no sockets. Your bytes go in, your bytes come out. The entire codebase is under 2,000 lines of Rust you can read in an afternoon.
+`veilpdf-core` is the engine behind [VeilPDF](https://veilpdf.com) on the Mac App Store. The app is closed source; this crate is the byte-level engine, open-sourced so anyone can audit what actually happens to your files.
 
-This is the engine behind [VeilPDF](https://veilpdf.com), a native macOS app with 47 PDF tools — available as a one-time $29 purchase on the Mac App Store.
+## Operations
 
-## Features
+| Operation | What it does | Notes |
+|-----------|-------------|-------|
+| **Merge** | Combine multiple PDFs into one | Preserves inherited page attributes (MediaBox, Resources) |
+| **Split** | Extract each page as a standalone PDF | Same inheritance handling as merge |
+| **Compress** | Reduce file size | JPEG recompression with ColorSpace classification; SMask/Mask images preserved |
+| **Sanitize** | Strip dangerous content | Always removes JS, actions, embedded files; optional XMP and `/Info` sweep |
+| **Extract** | Pull images out of a PDF | JPEG passthrough; FlateDecode → PNG |
 
-| Operation | What it does | How |
-|-----------|-------------|-----|
-| **Merge** | Combine multiple PDFs into one | Object ID remapping + page tree manipulation |
-| **Split** | Extract individual pages | Per-page document cloning with `prune_objects` |
-| **Compress** | Reduce file size | Stream compression + JPEG recompression + downscaling |
-| **Sanitize** | Strip dangerous content | Remove JS, actions, embedded files, metadata, XMP |
-| **Extract** | Pull images from PDFs | JPEG passthrough, FlateDecode→PNG conversion |
+## Hostile-input defenses
 
-## Security
+- **Encrypted PDF rejection** — password-protected files return a clear error instead of silently producing garbage.
+- **Object-count cap** — 500,000-object ceiling blocks object-stream amplification attacks that would otherwise hang every downstream operation.
+- **Bounded decompression** — 256 MB limit on deflate streams, driven by `flate2` (lopdf's built-in `decompress` silently fails on real-world files).
+- **Image decode cap** — 100 megapixel limit on decoded images stops OOM-style malicious streams.
+- **FFI panic safety** — every C entry point wrapped in `catch_unwind`; panics cannot unwind into foreign code.
+- **Input size cap** — 512 MB per document at the FFI boundary.
+- **Sanitize safety baseline** — JS, action chains, and embedded files are *always* stripped by `sanitize_pdf`, regardless of flags. Callers can add sweeps but cannot opt out.
 
-- **Encrypted PDF detection** — rejects password-protected files cleanly instead of producing garbage
-- **Bounded decompression** — zip bombs capped at 256 MB, not your entire RAM
-- **Image decode limits** — 100 megapixel cap prevents OOM on malicious image streams
-- **FFI panic safety** — all C-facing functions wrapped in `catch_unwind`
-- **Input size limits** — 512 MB max per document at the FFI boundary
-- **No network** — zero networking dependencies, impossible to phone home
-
-## Quick start
+## Quick start (Rust)
 
 ```toml
 [dependencies]
@@ -75,7 +83,8 @@ std::fs::write("small.pdf", result.data).unwrap();
 println!("Reduced by {:.1}%", result.reduction_percent);
 ```
 
-## Advanced compression
+<details>
+<summary><strong>Advanced compression options</strong></summary>
 
 ```rust
 use veilpdf_core::{compress_pdf_with_options, CompressOptions};
@@ -87,15 +96,16 @@ let result = compress_pdf_with_options(&data, &CompressOptions {
     strip_metadata: true,       // Remove author, creation date, XMP, thumbnails
 }).unwrap();
 
-println!("{:.1} MB → {:.1} MB ({:.1}% reduction)",
+println!("{:.1} MB -> {:.1} MB ({:.1}% reduction)",
     result.input_size as f64 / 1_048_576.0,
     result.output_size as f64 / 1_048_576.0,
     result.reduction_percent);
 ```
 
-## Sanitize
+</details>
 
-Remove JavaScript, actions, embedded files, and metadata from untrusted PDFs:
+<details>
+<summary><strong>Sanitize untrusted PDFs</strong></summary>
 
 ```rust
 use veilpdf_core::sanitize::{sanitize_pdf, FLAG_REMOVE_JS, FLAG_REMOVE_ACTIONS, FLAG_STRIP_METADATA};
@@ -105,9 +115,20 @@ let clean = sanitize_pdf(&data, FLAG_REMOVE_JS | FLAG_REMOVE_ACTIONS | FLAG_STRI
 std::fs::write("clean.pdf", clean).unwrap();
 ```
 
-Flags: `FLAG_STRIP_METADATA` · `FLAG_REMOVE_JS` · `FLAG_REMOVE_EMBEDDED` · `FLAG_REMOVE_ACTIONS` · `FLAG_REMOVE_XMP`
+| Flag | Removes |
+|------|---------|
+| `FLAG_STRIP_METADATA` | `/Info` dict (author, title, creation date, producer) |
+| `FLAG_REMOVE_JS` | `/JS`, `/JavaScript`, and named-JavaScript destinations |
+| `FLAG_REMOVE_EMBEDDED` | `/EmbeddedFiles` and `/FileAttachment` annotations |
+| `FLAG_REMOVE_ACTIONS` | `/OpenAction`, `/AA`, and link-annotation actions |
+| `FLAG_REMOVE_XMP` | `/Metadata` streams (both `/Type /Metadata` and `/Subtype /XML`) |
 
-## Extract images
+JS, actions, and embedded files are stripped unconditionally — the flags argument only *adds* sweeps, never opts out of the safety baseline.
+
+</details>
+
+<details>
+<summary><strong>Extract images</strong></summary>
 
 ```rust
 use veilpdf_core::extract_images;
@@ -121,15 +142,20 @@ for (i, img) in images.iter().enumerate() {
 }
 ```
 
+JPEG (`DCTDecode`) images are passed through unchanged. Flate-compressed images are decoded and re-encoded as PNG.
+
+</details>
+
 ## C FFI
 
-The library compiles as a static `.a` for embedding in Swift, Objective-C, C, or any language with C FFI:
+The crate builds as a static library (`libveilpdf_core.a`) and exposes a C ABI for embedding in Swift, Objective-C, C, or any language with C interop.
 
 ```c
 VeilBuffer veil_merge(const uint8_t *a, size_t a_len, const uint8_t *b, size_t b_len);
 VeilBuffer veil_split(const uint8_t *ptr, size_t len);
 VeilBuffer veil_compress(const uint8_t *ptr, size_t len);
-VeilBuffer veil_compress_ex(const uint8_t *ptr, size_t len, uint8_t quality, uint32_t max_dim, uint8_t strip_meta);
+VeilBuffer veil_compress_ex(const uint8_t *ptr, size_t len,
+                            uint8_t quality, uint32_t max_dim, uint8_t strip_meta);
 VeilBuffer veil_sanitize(const uint8_t *ptr, size_t len, uint32_t flags);
 VeilBuffer veil_extract_images(const uint8_t *ptr, size_t len);
 void veil_free_buffer(VeilBuffer buf);
@@ -137,70 +163,70 @@ void veil_free_buffer(VeilBuffer buf);
 
 ```bash
 cargo build --release
-# Output: target/release/libveilpdf_core.a
+# target/release/libveilpdf_core.a
 ```
+
+Every FFI entry point is wrapped in `catch_unwind`. Panics cannot cross the boundary.
 
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────┐
-│           veilpdf-core (Rust, MIT)                    │
-│                                                       │
-│  Merge    Split    Compress    Sanitize    Extract    │
-│  (lopdf)  (lopdf)  (lopdf +    (lopdf)    (image +   │
-│                     image +                 lopdf)    │
-│                     flate2)                           │
-│                                                       │
-│  Zero network · Bounded decompress · Panic-safe FFI   │
-└──────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│                    veilpdf-core  (MIT)                    │
+├──────────────────────────────────────────────────────────┤
+│   merge      split      compress     sanitize    extract  │
+│   lopdf      lopdf      lopdf        lopdf       lopdf    │
+│                         image                    image    │
+│                         flate2                            │
+├──────────────────────────────────────────────────────────┤
+│   limits  ·  encrypted-PDF rejection  ·  object-count cap │
+├──────────────────────────────────────────────────────────┤
+│     ffi   ·   C ABI   ·   catch_unwind   ·   unwind       │
+└──────────────────────────────────────────────────────────┘
 ```
 
 ### Dependencies
 
-| Crate | Purpose | Why |
-|-------|---------|-----|
-| [lopdf](https://crates.io/crates/lopdf) 0.34 | PDF object manipulation | Pure Rust, no C dependencies, handles page trees and object remapping |
-| [image](https://crates.io/crates/image) 0.25 | Image decode/encode | JPEG + PNG only (minimal feature flags) for recompression |
-| [flate2](https://crates.io/crates/flate2) 1.x | Deflate compression | Bounded decompression to prevent zip bombs (lopdf's built-in silently fails) |
+| Crate | Version | Purpose |
+|-------|---------|---------|
+| [lopdf](https://crates.io/crates/lopdf) | 0.34 | Pure-Rust PDF object manipulation — page trees, object remapping |
+| [image](https://crates.io/crates/image) | 0.25 | JPEG + PNG codecs (minimal feature flags) for recompression |
+| [flate2](https://crates.io/crates/flate2) | 1 | Bounded deflate decompression that rejects zip bombs |
 
-That's it. No async runtime, no TLS, no serialization framework.
+No async runtime. No TLS. No serialization framework. No network of any kind.
 
-## Building
+## Development
 
 ```bash
-cargo build --release    # Build static library
-cargo test               # Run tests
-cargo clippy             # Lint
-cargo doc --open         # Generate docs
+cargo build --release          # static lib + rlib
+cargo test --release           # 21 integration + unit tests
+cargo clippy -- -D warnings    # lint strict
+cargo doc --open               # browse the public API
 ```
+
+> **On `panic = "unwind"`**
+>
+> The release profile in `Cargo.toml` pins `panic = "unwind"` because `ffi.rs` uses `catch_unwind` to contain panics at the C boundary. Switching to `panic = "abort"` silently removes that safety guarantee — don't.
 
 ## The macOS app
 
-This library powers [VeilPDF](https://veilpdf.com) — a native macOS app with 47 PDF tools, available as a one-time $29 purchase on the Mac App Store.
+This crate is the byte-level engine of [**VeilPDF**](https://veilpdf.com) — a native macOS app with 47 PDF tools, one-time $29 on the Mac App Store. The app adds 42 higher-level tools on top of this engine using Apple's own frameworks:
 
-This repo contains the Rust engine that handles byte-level PDF operations — the part where your raw document data is processed. This is the code you'd want to audit if you care about privacy. The macOS app adds 42 additional tools built on Apple's PDFKit, Core Image, and WebKit frameworks:
+- **PDFKit** — page organization, rotation, annotations, form filling, signatures, stamps, watermarks, page numbers, passwords, permissions, bookmarks, metadata, flattening, diffing, repair
+- **Core Image** — contrast, scanner effect, color replacement
+- **WebKit** — HTML to PDF
+- **NSAttributedString** — Markdown to PDF
 
-- **PDFKit** — page organization, rotation, annotations, form filling, signatures, stamps, watermarks, page numbers, passwords, permissions, bookmarks, metadata, flattening, comparing, repair
-- **Core Image** — contrast adjustment, scanner effect, color replacement
-- **WebKit** — HTML to PDF conversion
-- **NSAttributedString** — Markdown to PDF conversion
-
-The app source is proprietary — the open-source core is the trust layer that proves your files stay local.
+The app source is proprietary; this crate — the part that touches your raw document bytes — is the auditable open-source trust layer.
 
 ## Contributing
 
-Contributions are welcome. The codebase is intentionally small — please keep it that way.
+The surface is intentionally small. Bug fixes, safety hardening, and test coverage for existing operations are welcome. Before opening a PR:
 
 ```bash
-cargo test && cargo clippy    # Must pass before submitting
+cargo test --release && cargo clippy -- -D warnings
 ```
 
 ## License
 
 MIT — see [LICENSE-MIT](LICENSE-MIT).
-
----
-
-<p align="center">
-  <strong>Made by <a href="https://github.com/iMADDDDDD">Imad Eddine Yamani</a></strong>
-</p>
