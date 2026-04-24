@@ -2,11 +2,14 @@
 name = "veilpdf-core"
 version = "1.0.0"
 edition = "2021"
+rust-version = "1.75"
 license = "MIT"
-description = "Privacy-first PDF manipulation library — merge, split, compress. Your PDFs never leave."
+authors = ["Imad Eddine Yamani"]
+description = "Privacy-first PDF engine: merge, split, compress, sanitize, and extract images. Zero network dependencies."
 repository = "https://github.com/iMADDDDDD/veilpdf-core"
-keywords = ["pdf", "merge", "split", "compress", "privacy"]
-categories = ["document-processing"]
+readme = "README.md"
+keywords = ["pdf", "privacy", "merge", "compress", "sanitize"]
+categories = ["parser-implementations"]
 
 [lib]
 name = "veilpdf_core"

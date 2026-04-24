@@ -1,28 +1,6 @@
-# Rust
+# Rust build artifacts
 target/
 Cargo.lock
-
-# macOS
-macos/build/
-macos/.build/
-macos/DerivedData/
-*.xcuserdata
-*.xcworkspace
-!*.xcworkspace/contents.xcworkspacedata
-
-# Xcode
-*.pbxuser
-*.mode1v3
-*.mode2v3
-*.perspectivev3
-*.xccheckout
-*.moved-aside
-
-# macOS system
-.DS_Store
-.AppleDouble
-.LSOverride
-._*
 
 # IDE
 .idea/
@@ -30,6 +8,8 @@ macos/DerivedData/
 *.swp
 *.swo
 
-# Environment
-.env
-.env.*
+# macOS system files
+.DS_Store
+
+# Local tooling state
+.omc/

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="core/icon.png" alt="VeilPDF" width="128" height="128">
+  <img src="icon.png" alt="VeilPDF" width="128" height="128">
 </p>
 
 <h1 align="center">veilpdf-core</h1>
@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="core/LICENSE-MIT"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT"></a>
+  <a href="LICENSE-MIT"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/rust-1.75%2B-orange.svg" alt="Rust: 1.75+">
   <img src="https://img.shields.io/badge/network-zero-brightgreen.svg" alt="Network: zero">
   <img src="https://img.shields.io/badge/unsafe-FFI%20boundary%20only-blue.svg" alt="Unsafe: FFI boundary only">
@@ -197,7 +197,7 @@ cargo test && cargo clippy    # Must pass before submitting
 
 ## License
 
-MIT — see [LICENSE-MIT](core/LICENSE-MIT).
+MIT — see [LICENSE-MIT](LICENSE-MIT).
 
 ---
 
