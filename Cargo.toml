@@ -2,7 +2,6 @@
 name = "veilpdf-core"
 version = "1.0.0"
 edition = "2021"
-rust-version = "1.75"
 license = "MIT"
 authors = ["Imad Eddine Yamani"]
 description = "Privacy-first PDF engine: merge, split, compress, sanitize, and extract images. Zero network dependencies."

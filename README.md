@@ -16,7 +16,6 @@
 <p align="center">
   <a href="https://github.com/iMADDDDDD/veilpdf-core/actions/workflows/ci.yml"><img src="https://github.com/iMADDDDDD/veilpdf-core/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
   <a href="LICENSE-MIT"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT"></a>
-  <img src="https://img.shields.io/badge/rust-1.75%2B-orange.svg" alt="Rust: 1.75+">
   <img src="https://img.shields.io/badge/network-zero-brightgreen.svg" alt="Network: zero">
   <img src="https://img.shields.io/badge/unsafe-FFI%20boundary%20only-blue.svg" alt="Unsafe: FFI boundary only">
 </p>

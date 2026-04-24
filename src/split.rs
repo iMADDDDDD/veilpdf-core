@@ -184,10 +184,8 @@ fn collect_inherited_page_attrs(
 
 fn collect_refs_in_object(obj: &Object, queue: &mut VecDeque<ObjectId>, visited: &mut HashSet<ObjectId>) {
     match obj {
-        Object::Reference(id) => {
-            if visited.insert(*id) {
-                queue.push_back(*id);
-            }
+        Object::Reference(id) if visited.insert(*id) => {
+            queue.push_back(*id);
         }
         Object::Array(arr) => {
             for o in arr {
