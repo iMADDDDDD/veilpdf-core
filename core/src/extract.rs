@@ -1,4 +1,5 @@
 use crate::compress::{decompress_bounded, find_image_xobjects, get_channels, get_filter_name, get_int, MAX_DECODE_PIXELS};
+use crate::limits::check_object_count;
 use crate::{Result, VeilError};
 use image::codecs::png::PngEncoder;
 use image::{DynamicImage, ImageEncoder, RgbImage};
@@ -20,6 +21,7 @@ pub struct ExtractedImage {
 /// are decompressed and re-encoded as PNG. Returns an error for encrypted PDFs.
 pub fn extract_images(data: &[u8]) -> Result<Vec<ExtractedImage>> {
     let doc = Document::load_mem(data)?;
+    check_object_count(&doc)?;
 
     if doc.trailer.get(b"Encrypt").is_ok() {
         return Err(VeilError::InvalidInput(

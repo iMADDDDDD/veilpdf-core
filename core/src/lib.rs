@@ -30,6 +30,7 @@ pub mod compress;
 pub mod sanitize;
 pub mod extract;
 pub mod ffi;
+pub mod limits;
 
 pub use merge::{merge_pdfs, merge_pdfs_from_bytes};
 pub use split::{split_pdf, split_pdf_from_bytes};

@@ -1,8 +1,10 @@
+use crate::limits::check_object_count;
 use crate::{Result, VeilError};
 use image::codecs::jpeg::JpegEncoder;
 use image::imageops::FilterType;
 use image::{DynamicImage, RgbImage};
 use lopdf::{dictionary, Document, Object, ObjectId, Stream};
+use std::collections::HashSet;
 use std::io::{Cursor, Read};
 use std::path::Path;
 
@@ -70,6 +72,7 @@ pub fn compress_pdf<P: AsRef<Path>>(path: P) -> Result<CompressResult> {
 pub fn compress_pdf_from_bytes(data: &[u8]) -> Result<CompressResult> {
     let input_size = data.len() as u64;
     let mut doc = Document::load_mem(data)?;
+    check_object_count(&doc)?;
 
     if doc.trailer.get(b"Encrypt").is_ok() {
         return Err(VeilError::InvalidInput(
@@ -103,6 +106,7 @@ pub fn compress_pdf_from_bytes(data: &[u8]) -> Result<CompressResult> {
 pub fn compress_pdf_with_options(data: &[u8], options: &CompressOptions) -> Result<CompressResult> {
     let input_size = data.len() as u64;
     let mut doc = Document::load_mem(data)?;
+    check_object_count(&doc)?;
 
     if doc.trailer.get(b"Encrypt").is_ok() {
         return Err(VeilError::InvalidInput(
@@ -110,8 +114,14 @@ pub fn compress_pdf_with_options(data: &[u8], options: &CompressOptions) -> Resu
         ));
     }
 
-    // Phase 1: Recompress images
-    let image_ids = find_image_xobjects(&doc);
+    // Phase 1: Recompress images. A5: skip any image that is referenced as
+    // an /SMask or /Mask elsewhere in the doc — re-encoding those as JPEG
+    // strips alpha and turns transparent regions black.
+    let mask_ids = collect_mask_referenced_ids(&doc);
+    let image_ids: Vec<ObjectId> = find_image_xobjects(&doc)
+        .into_iter()
+        .filter(|id| !mask_ids.contains(id))
+        .collect();
     for id in image_ids {
         recompress_image(&mut doc, id, options);
     }
@@ -264,15 +274,30 @@ fn recompress_image(doc: &mut Document, id: ObjectId, options: &CompressOptions)
     }
 
     // Determine color channels from ColorSpace
-    let channels = dict
-        .get(b"ColorSpace")
-        .ok()
+    let cs_obj = dict.get(b"ColorSpace").ok().cloned();
+    let channels = cs_obj
+        .as_ref()
         .and_then(|cs| get_channels(doc, cs))
         .unwrap_or(0);
     if channels != 1 && channels != 3 {
         return; // CMYK or unsupported
     }
     let is_rgb = channels == 3;
+
+    // A4: classify the source color space so that recompression preserves
+    // ICC-based color when present, and bails out (rather than destroying
+    // color) for non-Device, non-ICCBased spaces such as CalRGB / Indexed.
+    let cs_kind = classify_colorspace(cs_obj.as_ref());
+    match cs_kind {
+        ColorSpaceKind::Device | ColorSpaceKind::ICCBased(_) => {}
+        ColorSpaceKind::OtherUnsupported => {
+            // Non-Device, non-ICCBased (CalRGB, Indexed, etc.). Recompressing
+            // would silently drop the calibration / palette and shift colors.
+            // Skip — this is a deliberate no-op.
+            return;
+        }
+    }
+    let preserved_decode = dict.get(b"Decode").ok().cloned();
 
     // Determine filter (handles both name and array forms)
     let filter = get_filter_name(dict);
@@ -310,16 +335,14 @@ fn recompress_image(doc: &mut Document, id: ObjectId, options: &CompressOptions)
         if jpeg_buf.len() >= original_stream_size {
             return;
         }
-        let new_dict = dictionary! {
-            "Type" => "XObject",
-            "Subtype" => "Image",
-            "Width" => new_width as i64,
-            "Height" => new_height as i64,
-            "ColorSpace" => if is_rgb { "DeviceRGB" } else { "DeviceGray" },
-            "BitsPerComponent" => 8,
-            "Filter" => "DCTDecode",
-            "Length" => jpeg_buf.len() as i64,
-        };
+        let new_dict = build_image_dict(
+            new_width,
+            new_height,
+            is_rgb,
+            &cs_kind,
+            preserved_decode.as_ref(),
+            jpeg_buf.len() as i64,
+        );
         doc.set_object(id, Object::Stream(Stream::new(new_dict, jpeg_buf)));
         return;
     }
@@ -388,19 +411,119 @@ fn recompress_image(doc: &mut Document, id: ObjectId, options: &CompressOptions)
     }
 
     // Build replacement stream
-    let new_dict = dictionary! {
-        "Type" => "XObject",
-        "Subtype" => "Image",
-        "Width" => new_width as i64,
-        "Height" => new_height as i64,
-        "ColorSpace" => if is_rgb { "DeviceRGB" } else { "DeviceGray" },
-        "BitsPerComponent" => 8,
-        "Filter" => "DCTDecode",
-        "Length" => jpeg_buf.len() as i64,
-    };
+    let new_dict = build_image_dict(
+        new_width,
+        new_height,
+        is_rgb,
+        &cs_kind,
+        preserved_decode.as_ref(),
+        jpeg_buf.len() as i64,
+    );
 
     let new_stream = Stream::new(new_dict, jpeg_buf);
     doc.set_object(id, Object::Stream(new_stream));
+}
+
+/// Classification of a source image's `/ColorSpace` for the recompressor.
+enum ColorSpaceKind {
+    /// `/DeviceRGB`, `/DeviceGray` (or `/CalRGB` / `/CalGray` which we
+    /// approximate as Device-equivalent for channel count).
+    Device,
+    /// `[/ICCBased <ref>]` — preserve the ICC profile reference verbatim.
+    ICCBased(ObjectId),
+    /// `Indexed`, `DeviceN`, raw `Separation`, etc. — recompression would
+    /// destroy color fidelity, so the caller skips these.
+    OtherUnsupported,
+}
+
+fn classify_colorspace(cs_obj: Option<&Object>) -> ColorSpaceKind {
+    let cs = match cs_obj {
+        Some(c) => c,
+        None => return ColorSpaceKind::Device,
+    };
+    if let Ok(name) = cs.as_name() {
+        return match name {
+            b"DeviceRGB" | b"DeviceGray" | b"CalRGB" | b"CalGray" => ColorSpaceKind::Device,
+            _ => ColorSpaceKind::OtherUnsupported,
+        };
+    }
+    if let Ok(arr) = cs.as_array() {
+        if let Some(first) = arr.first() {
+            if let Ok(name) = first.as_name() {
+                if name == b"ICCBased" {
+                    if let Some(icc_ref) = arr.get(1) {
+                        if let Ok(icc_id) = icc_ref.as_reference() {
+                            return ColorSpaceKind::ICCBased(icc_id);
+                        }
+                    }
+                    return ColorSpaceKind::OtherUnsupported;
+                }
+                if name == b"CalRGB" || name == b"CalGray" {
+                    return ColorSpaceKind::Device;
+                }
+            }
+        }
+    }
+    ColorSpaceKind::OtherUnsupported
+}
+
+/// Build the replacement image XObject dictionary, preserving the source
+/// ColorSpace (including ICC references) and any `/Decode` array.
+fn build_image_dict(
+    width: u32,
+    height: u32,
+    is_rgb: bool,
+    cs_kind: &ColorSpaceKind,
+    preserved_decode: Option<&Object>,
+    length: i64,
+) -> lopdf::Dictionary {
+    let cs_value: Object = match cs_kind {
+        ColorSpaceKind::ICCBased(icc_id) => Object::Array(vec![
+            Object::Name(b"ICCBased".to_vec()),
+            Object::Reference(*icc_id),
+        ]),
+        // ColorSpaceKind::Device falls back to the channel-derived Device space.
+        // Same fallback for any unexpected variant — recompress() filters
+        // OtherUnsupported out before reaching here.
+        _ => Object::Name(if is_rgb { b"DeviceRGB".to_vec() } else { b"DeviceGray".to_vec() }),
+    };
+
+    let mut dict = dictionary! {
+        "Type" => "XObject",
+        "Subtype" => "Image",
+        "Width" => width as i64,
+        "Height" => height as i64,
+        "ColorSpace" => cs_value,
+        "BitsPerComponent" => 8,
+        "Filter" => "DCTDecode",
+        "Length" => length,
+    };
+    if let Some(decode) = preserved_decode {
+        dict.set("Decode", decode.clone());
+    }
+    dict
+}
+
+/// A5: collect every object ID that is referenced as `/SMask` or `/Mask`
+/// from any image XObject. Those objects must be skipped by the recompressor
+/// — re-encoding an alpha mask as JPEG strips alpha, leaving a black hole.
+fn collect_mask_referenced_ids(doc: &Document) -> HashSet<ObjectId> {
+    let mut masks: HashSet<ObjectId> = HashSet::new();
+    for obj in doc.objects.values() {
+        if let Ok(stream) = obj.as_stream() {
+            for key in [b"SMask".as_slice(), b"Mask".as_slice()] {
+                if let Ok(value) = stream.dict.get(key) {
+                    // /Mask may be a reference to an image XObject OR an
+                    // array of color values. We only care about the indirect-
+                    // reference form (the image XObject case).
+                    if let Ok(ref_id) = value.as_reference() {
+                        masks.insert(ref_id);
+                    }
+                }
+            }
+        }
+    }
+    masks
 }
 
 /// Strip metadata from the document.
@@ -421,24 +544,18 @@ fn strip_metadata(doc: &mut Document) {
         }
     }
 
-    // Remove XMP metadata streams and embedded thumbnails
+    // A7: detect XMP metadata streams by either /Subtype /XML *or* /Type
+    // /Metadata. Adobe / Ghostscript / macOS PDFKit commonly emit the latter
+    // form with no /Subtype at all, which the old check missed entirely.
     let ids_to_clean: Vec<ObjectId> = doc
         .objects
         .iter()
         .filter_map(|(&id, obj)| {
-            if let Ok(stream) = obj.as_stream() {
-                let is_xmp = stream
-                    .dict
-                    .get(b"Subtype")
-                    .ok()
-                    .and_then(|v| v.as_name().ok())
-                    .map(|n: &[u8]| n == b"XML")
-                    .unwrap_or(false);
-                if is_xmp {
-                    return Some(id);
-                }
+            if is_metadata_stream(obj) {
+                Some(id)
+            } else {
+                None
             }
-            None
         })
         .collect();
 
@@ -446,12 +563,52 @@ fn strip_metadata(doc: &mut Document) {
         doc.objects.remove(&id);
     }
 
-    // Remove /Thumb entries from pages
+    // Belt-and-braces: scrub orphan /Metadata pointers from the catalog
+    // and from every page so the file no longer claims to have metadata it
+    // doesn't ship.
+    if let Ok(root_ref) = doc.trailer.get(b"Root") {
+        if let Ok(root_id) = root_ref.as_reference() {
+            if let Ok(catalog) = doc.get_dictionary_mut(root_id) {
+                catalog.remove(b"Metadata");
+            }
+        }
+    }
+
+    // Remove /Thumb and /Metadata entries from pages
     for &page_id in doc.get_pages().values() {
         if let Ok(dict) = doc.get_dictionary_mut(page_id) {
             dict.remove(b"Thumb");
+            dict.remove(b"Metadata");
         }
     }
+}
+
+/// Return true for streams that look like XMP metadata. Matches both the
+/// `/Subtype /XML` form and the `/Type /Metadata` form (which PDFs from
+/// Adobe / Ghostscript / macOS PDFKit frequently emit).
+pub fn is_metadata_stream(obj: &Object) -> bool {
+    let stream = match obj.as_stream() {
+        Ok(s) => s,
+        Err(_) => return false,
+    };
+    let subtype_xml = stream
+        .dict
+        .get(b"Subtype")
+        .ok()
+        .and_then(|v| v.as_name().ok())
+        .map(|n: &[u8]| n == b"XML")
+        .unwrap_or(false);
+    if subtype_xml {
+        return true;
+    }
+    let type_metadata = stream
+        .dict
+        .get(b"Type")
+        .ok()
+        .and_then(|v| v.as_name().ok())
+        .map(|n: &[u8]| n == b"Metadata")
+        .unwrap_or(false);
+    type_metadata
 }
 
 /// Helper to read an integer from a PDF dictionary.

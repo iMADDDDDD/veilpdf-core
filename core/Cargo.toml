@@ -4,7 +4,7 @@ version = "1.0.0"
 edition = "2021"
 license = "MIT"
 description = "Privacy-first PDF manipulation library — merge, split, compress. Your PDFs never leave."
-repository = "https://github.com/pyveil/veilpdf-core"
+repository = "https://github.com/iMADDDDDD/veilpdf-core"
 keywords = ["pdf", "merge", "split", "compress", "privacy"]
 categories = ["document-processing"]
 

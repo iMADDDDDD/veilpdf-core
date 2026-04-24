@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/iMADDDDDD/veilpdf/blob/main/core/LICENSE-MIT"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT"></a>
+  <a href="core/LICENSE-MIT"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/rust-1.75%2B-orange.svg" alt="Rust: 1.75+">
   <img src="https://img.shields.io/badge/network-zero-brightgreen.svg" alt="Network: zero">
   <img src="https://img.shields.io/badge/unsafe-FFI%20boundary%20only-blue.svg" alt="Unsafe: FFI boundary only">
@@ -26,7 +26,7 @@
 
 Most PDF libraries pull in HTTP clients, async runtimes, or cloud SDKs. If you're processing sensitive documents — tax returns, contracts, medical records — that's a liability.
 
-`veilpdf-core` has **zero networking dependencies**. No `reqwest`, no `hyper`, no sockets. Your bytes go in, your bytes come out. The entire codebase is ~1,500 lines of Rust you can read in an afternoon.
+`veilpdf-core` has **zero networking dependencies**. No `reqwest`, no `hyper`, no sockets. Your bytes go in, your bytes come out. The entire codebase is under 2,000 lines of Rust you can read in an afternoon.
 
 This is the engine behind [VeilPDF](https://veilpdf.com), a native macOS app with 47 PDF tools — available as a one-time $29 purchase on the Mac App Store.
 
@@ -53,7 +53,7 @@ This is the engine behind [VeilPDF](https://veilpdf.com), a native macOS app wit
 
 ```toml
 [dependencies]
-veilpdf-core = { git = "https://github.com/iMADDDDDD/veilpdf" }
+veilpdf-core = { git = "https://github.com/iMADDDDDD/veilpdf-core" }
 ```
 
 ```rust
