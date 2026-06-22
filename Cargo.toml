@@ -18,6 +18,10 @@ crate-type = ["lib", "staticlib"]
 lopdf = { version = "0.34", default-features = false, features = ["nom_parser"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 flate2 = "1"
+ttf-parser = { version = "0.25", default-features = false, features = ["std"] }
+subsetter = { version = "0.2", default-features = false }
+unicode-bidi = "0.3"
+rustybuzz = "0.20"
 
 [profile.release]
 opt-level = "z"

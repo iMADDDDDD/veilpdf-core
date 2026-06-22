@@ -56,9 +56,7 @@ fn test_merge_via_ffi() {
     assert!(a.starts_with(b"%PDF"), "input A must be valid PDF");
     assert!(b.starts_with(b"%PDF"), "input B must be valid PDF");
 
-    let buf = unsafe {
-        veilpdf_core::ffi::veil_merge(a.as_ptr(), a.len(), b.as_ptr(), b.len())
-    };
+    let buf = unsafe { veilpdf_core::ffi::veil_merge(a.as_ptr(), a.len(), b.as_ptr(), b.len()) };
 
     if !buf.error.is_null() && buf.error_len > 0 {
         let err = unsafe { std::slice::from_raw_parts(buf.error, buf.error_len) };
@@ -69,16 +67,27 @@ fn test_merge_via_ffi() {
     assert!(buf.len > 0, "data length must be > 0");
 
     let data = unsafe { std::slice::from_raw_parts(buf.data, buf.len) };
-    assert!(data.starts_with(b"%PDF"), "merged output must start with %PDF header");
+    assert!(
+        data.starts_with(b"%PDF"),
+        "merged output must start with %PDF header"
+    );
 
     let doc = Document::load_mem(data).expect("merged PDF must be loadable by lopdf");
     let pages = doc.get_pages();
-    assert_eq!(pages.len(), 2, "merged PDF must have 2 pages, got {}", pages.len());
+    assert_eq!(
+        pages.len(),
+        2,
+        "merged PDF must have 2 pages, got {}",
+        pages.len()
+    );
 
     // Verify each page has required keys
     for (&_page_num, &page_id) in &pages {
         let page = doc.get_dictionary(page_id).expect("page dict");
-        assert!(page.has(b"MediaBox") || page.has(b"Parent"), "page missing required keys");
+        assert!(
+            page.has(b"MediaBox") || page.has(b"Parent"),
+            "page missing required keys"
+        );
     }
 
     unsafe { veilpdf_core::ffi::veil_free_buffer(buf) };
@@ -92,17 +101,14 @@ fn test_merge_three_pdfs_iteratively() {
     let c = make_one_page_pdf("Page 3");
 
     // Merge a + b
-    let buf_ab = unsafe {
-        veilpdf_core::ffi::veil_merge(a.as_ptr(), a.len(), b.as_ptr(), b.len())
-    };
+    let buf_ab = unsafe { veilpdf_core::ffi::veil_merge(a.as_ptr(), a.len(), b.as_ptr(), b.len()) };
     assert!(!buf_ab.data.is_null() && buf_ab.error.is_null());
     let ab = unsafe { std::slice::from_raw_parts(buf_ab.data, buf_ab.len) }.to_vec();
     unsafe { veilpdf_core::ffi::veil_free_buffer(buf_ab) };
 
     // Merge (a+b) + c
-    let buf_abc = unsafe {
-        veilpdf_core::ffi::veil_merge(ab.as_ptr(), ab.len(), c.as_ptr(), c.len())
-    };
+    let buf_abc =
+        unsafe { veilpdf_core::ffi::veil_merge(ab.as_ptr(), ab.len(), c.as_ptr(), c.len()) };
     if !buf_abc.error.is_null() && buf_abc.error_len > 0 {
         let err = unsafe { std::slice::from_raw_parts(buf_abc.error, buf_abc.error_len) };
         panic!("iterative merge error: {}", String::from_utf8_lossy(err));

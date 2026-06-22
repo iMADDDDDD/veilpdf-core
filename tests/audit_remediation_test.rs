@@ -180,9 +180,19 @@ fn a2_inherited_mediabox_materialized_after_merge() {
         .expect("MediaBox must be materialized on the merged page");
     let arr = mb.as_array().unwrap();
     assert_eq!(arr.len(), 4, "MediaBox should be a 4-element array");
-    let w = arr[2].as_i64().or_else(|_| arr[2].as_float().map(|f| f as i64)).unwrap();
-    let h = arr[3].as_i64().or_else(|_| arr[3].as_float().map(|f| f as i64)).unwrap();
-    assert_eq!((w, h), (200, 400), "MediaBox values must match the inherited ones");
+    let w = arr[2]
+        .as_i64()
+        .or_else(|_| arr[2].as_float().map(|f| f as i64))
+        .unwrap();
+    let h = arr[3]
+        .as_i64()
+        .or_else(|_| arr[3].as_float().map(|f| f as i64))
+        .unwrap();
+    assert_eq!(
+        (w, h),
+        (200, 400),
+        "MediaBox values must match the inherited ones"
+    );
 }
 
 // ─── A3: split copies only the page's transitive resources ────────────────
@@ -193,8 +203,9 @@ fn a3_split_completes_for_many_pages() {
     // 50 valid one-page docs, in finite time.
     let mut acc = make_one_page_pdf("Page 1");
     for i in 2..=50 {
-        acc = veilpdf_core::merge_pdfs_from_bytes(&[&acc, &make_one_page_pdf(&format!("Page {i}"))])
-            .unwrap();
+        acc =
+            veilpdf_core::merge_pdfs_from_bytes(&[&acc, &make_one_page_pdf(&format!("Page {i}"))])
+                .unwrap();
     }
 
     let start = std::time::Instant::now();
@@ -295,6 +306,7 @@ fn a4_icc_profile_preserved_across_recompression() {
     let opts = veilpdf_core::CompressOptions {
         image_quality: 50,
         max_image_dimension: 100,
+        target_dpi: 0,
         strip_metadata: false,
     };
     let result = veilpdf_core::compress_pdf_with_options(&input, &opts).unwrap();
@@ -316,7 +328,9 @@ fn a4_icc_profile_preserved_across_recompression() {
                 continue;
             }
             let cs = s.dict.get(b"ColorSpace").expect("ColorSpace must exist");
-            let arr = cs.as_array().expect("ColorSpace must remain an array (ICCBased)");
+            let arr = cs
+                .as_array()
+                .expect("ColorSpace must remain an array (ICCBased)");
             assert_eq!(
                 arr.first().and_then(|o| o.as_name().ok()),
                 Some(b"ICCBased".as_slice()),
@@ -334,7 +348,10 @@ fn a4_icc_profile_preserved_across_recompression() {
             found = true;
         }
     }
-    assert!(found, "recompressed image XObject must be present in output");
+    assert!(
+        found,
+        "recompressed image XObject must be present in output"
+    );
 }
 
 // ─── A5: SMask images skipped during recompression ─────────────────────────
@@ -433,6 +450,7 @@ fn a5_smask_image_data_unchanged() {
     let opts = veilpdf_core::CompressOptions {
         image_quality: 30,
         max_image_dimension: 50, // would normally force re-encode
+        target_dpi: 0,
         strip_metadata: false,
     };
     let result = veilpdf_core::compress_pdf_with_options(&input, &opts).unwrap();
@@ -451,7 +469,11 @@ fn a5_smask_image_data_unchanged() {
             }
         }
     }
-    assert_eq!(mask_ids.len(), 1, "expected exactly one SMask reference in output");
+    assert_eq!(
+        mask_ids.len(),
+        1,
+        "expected exactly one SMask reference in output"
+    );
     let mask_id = *mask_ids.iter().next().unwrap();
     let mask_obj = out.get_object(mask_id).unwrap();
     let mask_stream = mask_obj.as_stream().unwrap();
@@ -620,8 +642,7 @@ fn a7_type_metadata_streams_stripped_with_no_subtype() {
     doc.save_to(&mut input).unwrap();
 
     // Strip via sanitize with FLAG_REMOVE_XMP set.
-    let out =
-        veilpdf_core::sanitize_pdf(&input, veilpdf_core::sanitize::FLAG_REMOVE_XMP).unwrap();
+    let out = veilpdf_core::sanitize_pdf(&input, veilpdf_core::sanitize::FLAG_REMOVE_XMP).unwrap();
     let outdoc = Document::load_mem(&out).unwrap();
 
     // No remaining stream should carry /Type /Metadata.

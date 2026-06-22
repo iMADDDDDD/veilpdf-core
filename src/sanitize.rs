@@ -4,11 +4,11 @@ use crate::{Result, VeilError};
 use lopdf::{Document, Object, ObjectId};
 
 /// Flag constants for sanitization.
-pub const FLAG_STRIP_METADATA: u32  = 0b00001;
-pub const FLAG_REMOVE_JS: u32       = 0b00010;
+pub const FLAG_STRIP_METADATA: u32 = 0b00001;
+pub const FLAG_REMOVE_JS: u32 = 0b00010;
 pub const FLAG_REMOVE_EMBEDDED: u32 = 0b00100;
-pub const FLAG_REMOVE_ACTIONS: u32  = 0b01000;
-pub const FLAG_REMOVE_XMP: u32      = 0b10000;
+pub const FLAG_REMOVE_ACTIONS: u32 = 0b01000;
+pub const FLAG_REMOVE_XMP: u32 = 0b10000;
 
 /// Always-on safety baseline. A8: callers cannot opt out of these — even
 /// `flags == 0` must produce a JS-free, action-free, embedded-file-free PDF.
@@ -197,7 +197,13 @@ fn strip_javascript(doc: &mut Document) {
     let stream_ids: Vec<ObjectId> = doc
         .objects
         .iter()
-        .filter_map(|(&id, o)| if matches!(o, Object::Stream(_)) { Some(id) } else { None })
+        .filter_map(|(&id, o)| {
+            if matches!(o, Object::Stream(_)) {
+                Some(id)
+            } else {
+                None
+            }
+        })
         .collect();
     for id in stream_ids {
         if let Ok(Object::Stream(s)) = doc.get_object_mut(id) {

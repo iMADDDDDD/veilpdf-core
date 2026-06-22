@@ -121,17 +121,18 @@ fn build_single_page_doc(src: &Document, page_id: ObjectId) -> Result<Document> 
     });
     dst.trailer.set("Root", Object::Reference(catalog_id));
 
-    // Drop trailer entries that referenced byte offsets in the original file.
+    // Defensive: the destination is built fresh via Document::with_version
+    // so /Prev and /XRefStm cannot be present today, but stripping them
+    // here mirrors the bug-class #1 convention every other save_to site
+    // uses — any future helper that started from `src.clone()` would inherit
+    // the bug without this strip.
     dst.trailer.remove(b"Prev");
     dst.trailer.remove(b"XRefStm");
 
     Ok(dst)
 }
 
-fn collect_inherited_page_attrs(
-    src: &Document,
-    page_id: ObjectId,
-) -> Vec<(&'static [u8], Object)> {
+fn collect_inherited_page_attrs(src: &Document, page_id: ObjectId) -> Vec<(&'static [u8], Object)> {
     const INHERITABLE: [&[u8]; 4] = [b"MediaBox", b"CropBox", b"Resources", b"Rotate"];
     let mut out: Vec<(&'static [u8], Object)> = Vec::new();
 
@@ -140,8 +141,11 @@ fn collect_inherited_page_attrs(
         Err(_) => return out,
     };
 
-    let mut needed: Vec<&'static [u8]> =
-        INHERITABLE.iter().copied().filter(|k| !page.has(k)).collect();
+    let mut needed: Vec<&'static [u8]> = INHERITABLE
+        .iter()
+        .copied()
+        .filter(|k| !page.has(k))
+        .collect();
     if needed.is_empty() {
         return out;
     }
@@ -182,7 +186,11 @@ fn collect_inherited_page_attrs(
     out
 }
 
-fn collect_refs_in_object(obj: &Object, queue: &mut VecDeque<ObjectId>, visited: &mut HashSet<ObjectId>) {
+fn collect_refs_in_object(
+    obj: &Object,
+    queue: &mut VecDeque<ObjectId>,
+    visited: &mut HashSet<ObjectId>,
+) {
     match obj {
         Object::Reference(id) if visited.insert(*id) => {
             queue.push_back(*id);
@@ -208,7 +216,11 @@ fn collect_refs_in_object(obj: &Object, queue: &mut VecDeque<ObjectId>, visited:
     }
 }
 
-fn collect_refs_in_dict(d: &lopdf::Dictionary, queue: &mut VecDeque<ObjectId>, visited: &mut HashSet<ObjectId>) {
+fn collect_refs_in_dict(
+    d: &lopdf::Dictionary,
+    queue: &mut VecDeque<ObjectId>,
+    visited: &mut HashSet<ObjectId>,
+) {
     for (key, value) in d.iter() {
         if key.as_slice() == b"Parent" {
             continue;
@@ -224,9 +236,7 @@ fn remap_refs(obj: Object, map: &BTreeMap<ObjectId, ObjectId>) -> Object {
             Some(new_id) => Object::Reference(*new_id),
             None => Object::Null,
         },
-        Object::Array(arr) => {
-            Object::Array(arr.into_iter().map(|o| remap_refs(o, map)).collect())
-        }
+        Object::Array(arr) => Object::Array(arr.into_iter().map(|o| remap_refs(o, map)).collect()),
         Object::Dictionary(mut dict) => {
             for (_, val) in dict.iter_mut() {
                 *val = remap_refs(std::mem::replace(val, Object::Null), map);

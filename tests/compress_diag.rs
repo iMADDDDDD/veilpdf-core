@@ -18,7 +18,9 @@ fn diagnose_image_compression() {
             }
         }
         let mut encoder = JpegEncoder::new_with_quality(Cursor::new(&mut jpeg_buf), 95);
-        encoder.encode_image(&image::DynamicImage::ImageRgb8(img)).unwrap();
+        encoder
+            .encode_image(&image::DynamicImage::ImageRgb8(img))
+            .unwrap();
     }
     eprintln!("Created test JPEG: {} bytes", jpeg_buf.len());
 
@@ -71,7 +73,8 @@ fn diagnose_image_compression() {
         "Type" => "Catalog",
         "Pages" => lopdf::Object::Reference(pages_id),
     });
-    doc.trailer.set("Root", lopdf::Object::Reference(catalog_id));
+    doc.trailer
+        .set("Root", lopdf::Object::Reference(catalog_id));
 
     let mut pdf_bytes = Vec::new();
     doc.save_to(&mut pdf_bytes).unwrap();
@@ -86,12 +89,31 @@ fn diagnose_image_compression() {
             let subtype = dict.get(b"Subtype").ok().and_then(|v| v.as_name().ok());
             if subtype == Some(b"Image") {
                 found_images += 1;
-                let w = dict.get(b"Width").ok().and_then(|v| v.as_i64().ok()).unwrap_or(-1);
-                let h = dict.get(b"Height").ok().and_then(|v| v.as_i64().ok()).unwrap_or(-1);
-                let cs = dict.get(b"ColorSpace").ok().map(|v| format!("{:?}", v)).unwrap_or("NONE".into());
-                let filter = dict.get(b"Filter").ok().map(|v| format!("{:?}", v)).unwrap_or("NONE".into());
+                let w = dict
+                    .get(b"Width")
+                    .ok()
+                    .and_then(|v| v.as_i64().ok())
+                    .unwrap_or(-1);
+                let h = dict
+                    .get(b"Height")
+                    .ok()
+                    .and_then(|v| v.as_i64().ok())
+                    .unwrap_or(-1);
+                let cs = dict
+                    .get(b"ColorSpace")
+                    .ok()
+                    .map(|v| format!("{:?}", v))
+                    .unwrap_or("NONE".into());
+                let filter = dict
+                    .get(b"Filter")
+                    .ok()
+                    .map(|v| format!("{:?}", v))
+                    .unwrap_or("NONE".into());
                 let content_len = stream.content.len();
-                eprintln!("Image {:?}: {}x{}, cs={}, filter={}, content_bytes={}", id, w, h, cs, filter, content_len);
+                eprintln!(
+                    "Image {:?}: {}x{}, cs={}, filter={}, content_bytes={}",
+                    id, w, h, cs, filter, content_len
+                );
             }
         }
     }
@@ -102,6 +124,7 @@ fn diagnose_image_compression() {
     let options = veilpdf_core::compress::CompressOptions {
         image_quality: 40,
         max_image_dimension: 100, // Force resize from 200 to 100
+        target_dpi: 0,
         strip_metadata: true,
     };
 
@@ -140,7 +163,9 @@ fn diagnose_iccbased_compression() {
             }
         }
         let mut encoder = JpegEncoder::new_with_quality(Cursor::new(&mut jpeg_buf), 95);
-        encoder.encode_image(&image::DynamicImage::ImageRgb8(img)).unwrap();
+        encoder
+            .encode_image(&image::DynamicImage::ImageRgb8(img))
+            .unwrap();
     }
 
     let mut doc = lopdf::Document::with_version("1.7");
@@ -202,7 +227,8 @@ fn diagnose_iccbased_compression() {
         "Type" => "Catalog",
         "Pages" => lopdf::Object::Reference(pages_id),
     });
-    doc.trailer.set("Root", lopdf::Object::Reference(catalog_id));
+    doc.trailer
+        .set("Root", lopdf::Object::Reference(catalog_id));
 
     let mut pdf_bytes = Vec::new();
     doc.save_to(&mut pdf_bytes).unwrap();
@@ -211,6 +237,7 @@ fn diagnose_iccbased_compression() {
     let options = veilpdf_core::compress::CompressOptions {
         image_quality: 40,
         max_image_dimension: 100,
+        target_dpi: 0,
         strip_metadata: true,
     };
 

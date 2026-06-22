@@ -57,7 +57,10 @@ fn make_multi_page_pdf(n: usize) -> Vec<u8> {
         let buf = unsafe {
             veilpdf_core::ffi::veil_merge(acc.as_ptr(), acc.len(), next.as_ptr(), next.len())
         };
-        assert!(buf.error.is_null(), "merge failed while building multi-page PDF");
+        assert!(
+            buf.error.is_null(),
+            "merge failed while building multi-page PDF"
+        );
         acc = unsafe { std::slice::from_raw_parts(buf.data, buf.len) }.to_vec();
         unsafe { veilpdf_core::ffi::veil_free_buffer(buf) };
     }
@@ -115,7 +118,11 @@ fn test_split_multi_page() {
     for (i, page_data) in pages.iter().enumerate() {
         assert!(page_data.starts_with(b"%PDF"), "page {i} must be valid PDF");
         let doc = Document::load_mem(page_data).unwrap_or_else(|_| panic!("page {i} must load"));
-        assert_eq!(doc.get_pages().len(), 1, "page {i} must have exactly 1 page");
+        assert_eq!(
+            doc.get_pages().len(),
+            1,
+            "page {i} must have exactly 1 page"
+        );
     }
 
     unsafe { veilpdf_core::ffi::veil_free_buffer(buf) };
@@ -154,7 +161,10 @@ fn test_compress_valid_pdf() {
     assert!(buf.len > 0);
 
     let data = unsafe { std::slice::from_raw_parts(buf.data, buf.len) };
-    assert!(data.starts_with(b"%PDF"), "compressed output must be valid PDF");
+    assert!(
+        data.starts_with(b"%PDF"),
+        "compressed output must be valid PDF"
+    );
 
     let doc = Document::load_mem(data).expect("compressed PDF must load");
     assert_eq!(doc.get_pages().len(), 1, "page count must be preserved");

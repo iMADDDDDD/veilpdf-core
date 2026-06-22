@@ -65,7 +65,13 @@ pub fn merge_pdfs_from_bytes(documents: &[&[u8]]) -> Result<Vec<u8>> {
 fn append_document(base: &mut Document, incoming: &Document) -> Result<()> {
     // Use max of both the highest key and base.max_id to avoid collisions
     // with deleted objects that left gaps in the object table
-    let max_id = base.objects.keys().map(|&(num, _)| num).max().unwrap_or(0).max(base.max_id);
+    let max_id = base
+        .objects
+        .keys()
+        .map(|&(num, _)| num)
+        .max()
+        .unwrap_or(0)
+        .max(base.max_id);
 
     let mut id_map: BTreeMap<ObjectId, ObjectId> = BTreeMap::new();
     let mut next_id = max_id + 1;
@@ -169,8 +175,11 @@ fn collect_inherited_page_attrs(
     };
 
     // Anything already defined on the page itself is not inherited.
-    let mut needed: Vec<&'static [u8]> =
-        INHERITABLE.iter().copied().filter(|k| !page.has(k)).collect();
+    let mut needed: Vec<&'static [u8]> = INHERITABLE
+        .iter()
+        .copied()
+        .filter(|k| !page.has(k))
+        .collect();
     if needed.is_empty() {
         return out;
     }
@@ -222,9 +231,7 @@ fn remap_refs(obj: Object, map: &BTreeMap<ObjectId, ObjectId>) -> Object {
             Some(new_id) => Object::Reference(*new_id),
             None => Object::Null,
         },
-        Object::Array(arr) => {
-            Object::Array(arr.into_iter().map(|o| remap_refs(o, map)).collect())
-        }
+        Object::Array(arr) => Object::Array(arr.into_iter().map(|o| remap_refs(o, map)).collect()),
         Object::Dictionary(mut dict) => {
             for (_, val) in dict.iter_mut() {
                 *val = remap_refs(std::mem::replace(val, Object::Null), map);

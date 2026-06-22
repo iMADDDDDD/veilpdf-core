@@ -1,4 +1,7 @@
-use crate::compress::{decompress_bounded, find_image_xobjects, get_channels, get_filter_name, get_int, MAX_DECODE_PIXELS};
+use crate::compress::{
+    decompress_bounded, find_image_xobjects, get_channels, get_filter_name, get_int,
+    MAX_DECODE_PIXELS,
+};
 use crate::limits::check_object_count;
 use crate::{Result, VeilError};
 use image::codecs::png::PngEncoder;
@@ -109,12 +112,15 @@ pub fn extract_images(data: &[u8]) -> Result<Vec<ExtractedImage>> {
 
                 let mut png_buf = Vec::new();
                 let encoder = PngEncoder::new(Cursor::new(&mut png_buf));
-                if encoder.write_image(
-                    img.as_bytes(),
-                    img.width(),
-                    img.height(),
-                    img.color().into(),
-                ).is_err() {
+                if encoder
+                    .write_image(
+                        img.as_bytes(),
+                        img.width(),
+                        img.height(),
+                        img.color().into(),
+                    )
+                    .is_err()
+                {
                     continue;
                 }
 

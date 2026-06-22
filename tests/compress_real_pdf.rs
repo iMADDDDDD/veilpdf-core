@@ -18,7 +18,11 @@ fn diagnose_real_pdf() {
         }
     };
 
-    eprintln!("Loaded: {} ({:.1} MB)", path, data.len() as f64 / 1024.0 / 1024.0);
+    eprintln!(
+        "Loaded: {} ({:.1} MB)",
+        path,
+        data.len() as f64 / 1024.0 / 1024.0
+    );
 
     let doc = Document::load_mem(&data).unwrap();
     eprintln!("Pages: {}", doc.get_pages().len());
@@ -46,16 +50,40 @@ fn diagnose_real_pdf() {
         }
 
         image_count += 1;
-        let w = dict.get(b"Width").ok().and_then(|v| v.as_i64().ok()).unwrap_or(-1);
-        let h = dict.get(b"Height").ok().and_then(|v| v.as_i64().ok()).unwrap_or(-1);
-        let bpc = dict.get(b"BitsPerComponent").ok().and_then(|v| v.as_i64().ok()).unwrap_or(-1);
+        let w = dict
+            .get(b"Width")
+            .ok()
+            .and_then(|v| v.as_i64().ok())
+            .unwrap_or(-1);
+        let h = dict
+            .get(b"Height")
+            .ok()
+            .and_then(|v| v.as_i64().ok())
+            .unwrap_or(-1);
+        let bpc = dict
+            .get(b"BitsPerComponent")
+            .ok()
+            .and_then(|v| v.as_i64().ok())
+            .unwrap_or(-1);
         let content_len = stream.content.len();
         let has_smask = dict.has(b"SMask");
-        let is_mask = dict.get(b"ImageMask").ok().and_then(|v| v.as_bool().ok()).unwrap_or(false);
+        let is_mask = dict
+            .get(b"ImageMask")
+            .ok()
+            .and_then(|v| v.as_bool().ok())
+            .unwrap_or(false);
 
         // Raw colorspace and filter for debugging
-        let cs_debug = dict.get(b"ColorSpace").ok().map(|v| debug_object(&doc, v)).unwrap_or("NONE".into());
-        let filter_debug = dict.get(b"Filter").ok().map(|v| debug_object(&doc, v)).unwrap_or("NONE".into());
+        let cs_debug = dict
+            .get(b"ColorSpace")
+            .ok()
+            .map(|v| debug_object(&doc, v))
+            .unwrap_or("NONE".into());
+        let filter_debug = dict
+            .get(b"Filter")
+            .ok()
+            .map(|v| debug_object(&doc, v))
+            .unwrap_or("NONE".into());
 
         eprintln!(
             "\nImage {:?}: {}x{} bpc={} content={}B smask={} mask={}",
@@ -114,6 +142,7 @@ fn diagnose_real_pdf() {
     let options = veilpdf_core::compress::CompressOptions {
         image_quality: 40,
         max_image_dimension: 1024,
+        target_dpi: 0,
         strip_metadata: true,
     };
     let result = veilpdf_core::compress::compress_pdf_with_options(&data, &options).unwrap();
@@ -141,7 +170,10 @@ fn resolve_channels(doc: &Document, cs: &lopdf::Object) -> Option<u32> {
             b"DeviceRGB" | b"CalRGB" => Some(3),
             b"DeviceGray" | b"CalGray" => Some(1),
             _ => {
-                eprintln!("  [channels] unknown name: {:?}", String::from_utf8_lossy(name));
+                eprintln!(
+                    "  [channels] unknown name: {:?}",
+                    String::from_utf8_lossy(name)
+                );
                 None
             }
         };
@@ -156,10 +188,19 @@ fn resolve_channels(doc: &Document, cs: &lopdf::Object) -> Option<u32> {
                             if let Ok(icc_id) = icc_ref.as_reference() {
                                 if let Ok(icc_obj) = doc.get_object(icc_id) {
                                     if let Ok(icc_stream) = icc_obj.as_stream() {
-                                        let n = icc_stream.dict.get(b"N").ok().and_then(|v| v.as_i64().ok()).unwrap_or(0);
+                                        let n = icc_stream
+                                            .dict
+                                            .get(b"N")
+                                            .ok()
+                                            .and_then(|v| v.as_i64().ok())
+                                            .unwrap_or(0);
                                         eprintln!("  [channels] ICCBased N={}", n);
-                                        if n == 3 { return Some(3); }
-                                        if n == 1 { return Some(1); }
+                                        if n == 3 {
+                                            return Some(3);
+                                        }
+                                        if n == 1 {
+                                            return Some(1);
+                                        }
                                         return None;
                                     }
                                 }
@@ -180,7 +221,10 @@ fn resolve_channels(doc: &Document, cs: &lopdf::Object) -> Option<u32> {
                         return None;
                     }
                     _ => {
-                        eprintln!("  [channels] unknown array CS: {:?}", String::from_utf8_lossy(name));
+                        eprintln!(
+                            "  [channels] unknown array CS: {:?}",
+                            String::from_utf8_lossy(name)
+                        );
                         return None;
                     }
                 }
@@ -189,7 +233,10 @@ fn resolve_channels(doc: &Document, cs: &lopdf::Object) -> Option<u32> {
     }
     // Indirect reference — resolve it
     if let Ok(ref_id) = cs.as_reference() {
-        eprintln!("  [channels] ColorSpace is indirect ref {:?}, resolving...", ref_id);
+        eprintln!(
+            "  [channels] ColorSpace is indirect ref {:?}, resolving...",
+            ref_id
+        );
         if let Ok(resolved) = doc.get_object(ref_id) {
             return resolve_channels(doc, resolved);
         }
@@ -206,7 +253,10 @@ fn debug_object(doc: &Document, obj: &lopdf::Object) -> String {
             format!("[{}]", items.join(", "))
         }
         lopdf::Object::Reference(id) => {
-            let resolved = doc.get_object(*id).map(|o| debug_object(doc, o)).unwrap_or("???".into());
+            let resolved = doc
+                .get_object(*id)
+                .map(|o| debug_object(doc, o))
+                .unwrap_or("???".into());
             format!("ref{:?}->{}", id, resolved)
         }
         lopdf::Object::Integer(i) => format!("{}", i),

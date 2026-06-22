@@ -9,8 +9,8 @@
 </p>
 
 <p align="center">
-  Merge &middot; Split &middot; Compress &middot; Sanitize &middot; Extract<br>
-  <sub>Pure Rust &middot; Under 2,000 lines &middot; MIT licensed</sub>
+  Merge &middot; Split &middot; Compress &middot; Sanitize &middot; Extract &middot; Watermark &middot; Redact<br>
+  <sub>Pure Rust &middot; No network code &middot; MIT licensed</sub>
 </p>
 
 <p align="center">
@@ -25,8 +25,8 @@
 ## At a glance
 
 - **Zero networking.** No `reqwest`, no `hyper`, no sockets. Cannot phone home by construction.
-- **Three dependencies.** `lopdf`, `image`, `flate2`. No async runtime, no TLS, no serialization framework.
-- **Under 2,000 lines.** An afternoon to read the entire codebase end to end.
+- **Focused dependency set.** PDF object rewriting, JPEG/PNG handling, bounded deflate, and font shaping/subsetting only.
+- **Auditable core.** The byte-level document engine is separate from the proprietary macOS app.
 - **Hostile-input safe.** Encrypted PDFs rejected, zip bombs capped, megapixel-bombed images rejected, FFI panics contained.
 - **Rust + C ABI.** Use as a Rust crate or link the static `.a` from Swift, Objective-C, or C.
 
@@ -45,6 +45,9 @@ Most PDF libraries pull in HTTP clients, async runtimes, or cloud SDKs. If you'r
 | **Compress** | Reduce file size | JPEG recompression with ColorSpace classification; SMask/Mask images preserved |
 | **Sanitize** | Strip dangerous content | Always removes JS, actions, embedded files; optional XMP and `/Info` sweep |
 | **Extract** | Pull images out of a PDF | JPEG passthrough; FlateDecode → PNG |
+| **Watermark** | Bake text watermarks into pages | Embedded subsetted TrueType fonts, opacity, rotation, Unicode shaping |
+| **Redact** | Apply page-space redaction rectangles | Removes covered text bytes and paints vector redaction boxes |
+| **Annotations** | Remove selected annotation classes | Preserves form widgets while filtering notes, drawings, stamps, links, etc. |
 
 ## Hostile-input defenses
 
@@ -92,6 +95,7 @@ let data = std::fs::read("input.pdf").unwrap();
 let result = compress_pdf_with_options(&data, &CompressOptions {
     image_quality: 60,          // JPEG quality (1-100)
     max_image_dimension: 1600,  // Downscale images larger than this
+    target_dpi: 120,            // DPI-aware downsampling; 0 disables it
     strip_metadata: true,       // Remove author, creation date, XMP, thumbnails
 }).unwrap();
 
@@ -154,9 +158,13 @@ VeilBuffer veil_merge(const uint8_t *a, size_t a_len, const uint8_t *b, size_t b
 VeilBuffer veil_split(const uint8_t *ptr, size_t len);
 VeilBuffer veil_compress(const uint8_t *ptr, size_t len);
 VeilBuffer veil_compress_ex(const uint8_t *ptr, size_t len,
-                            uint8_t quality, uint32_t max_dim, uint8_t strip_meta);
+                            uint8_t quality, uint32_t max_dim,
+                            uint32_t target_dpi, uint8_t strip_meta);
 VeilBuffer veil_sanitize(const uint8_t *ptr, size_t len, uint32_t flags);
+VeilBuffer veil_remove_annotations(const uint8_t *ptr, size_t len, uint32_t flags);
 VeilBuffer veil_extract_images(const uint8_t *ptr, size_t len);
+VeilBuffer veil_apply_watermark(const uint8_t *ptr, size_t len, ...);
+VeilBuffer veil_apply_redactions(const uint8_t *ptr, size_t len, ...);
 void veil_free_buffer(VeilBuffer buf);
 ```
 
@@ -191,14 +199,18 @@ Every FFI entry point is wrapped in `catch_unwind`. Panics cannot cross the boun
 | [lopdf](https://crates.io/crates/lopdf) | 0.34 | Pure-Rust PDF object manipulation — page trees, object remapping |
 | [image](https://crates.io/crates/image) | 0.25 | JPEG + PNG codecs (minimal feature flags) for recompression |
 | [flate2](https://crates.io/crates/flate2) | 1 | Bounded deflate decompression that rejects zip bombs |
+| [ttf-parser](https://crates.io/crates/ttf-parser) | 0.25 | TrueType metrics for embedded watermark fonts |
+| [subsetter](https://crates.io/crates/subsetter) | 0.2 | Font subsetting so watermarks do not embed full font files |
+| [unicode-bidi](https://crates.io/crates/unicode-bidi) | 0.3 | Bidirectional text ordering before shaping |
+| [rustybuzz](https://crates.io/crates/rustybuzz) | 0.20 | Pure-Rust text shaping for watermark glyph streams |
 
-No async runtime. No TLS. No serialization framework. No network of any kind.
+No async runtime. No TLS client. No serialization framework. No network of any kind.
 
 ## Development
 
 ```bash
 cargo build --release          # static lib + rlib
-cargo test --release           # 21 integration + unit tests
+cargo test --release           # full test suite
 cargo clippy -- -D warnings    # lint strict
 cargo doc --open               # browse the public API
 ```
@@ -209,7 +221,7 @@ cargo doc --open               # browse the public API
 
 ## The macOS app
 
-This crate is the byte-level engine of [**VeilPDF**](https://veilpdf.com) — a native macOS app with 47 PDF tools, one-time $29 on the Mac App Store. The app adds 42 higher-level tools on top of this engine using Apple's own frameworks:
+This crate is the byte-level engine of [**VeilPDF**](https://veilpdf.com) — a native macOS app with 47 PDF tools, one-time $29 on the Mac App Store. The app layers a proprietary macOS interface and additional native workflows on top of this engine using Apple's own frameworks:
 
 - **PDFKit** — page organization, rotation, annotations, form filling, signatures, stamps, watermarks, page numbers, passwords, permissions, bookmarks, metadata, flattening, diffing, repair
 - **Core Image** — contrast, scanner effect, color replacement

@@ -24,19 +24,30 @@
 //! println!("Reduced by {:.1}%", result.reduction_percent);
 //! ```
 
-pub mod merge;
-pub mod split;
+pub mod annotations;
 pub mod compress;
-pub mod sanitize;
 pub mod extract;
 pub mod ffi;
+pub mod font;
 pub mod limits;
+pub mod merge;
+pub mod redact;
+pub mod sanitize;
+pub mod shape;
+pub mod split;
+pub mod watermark;
 
-pub use merge::{merge_pdfs, merge_pdfs_from_bytes};
-pub use split::{split_pdf, split_pdf_from_bytes};
-pub use compress::{compress_pdf, compress_pdf_from_bytes, compress_pdf_with_options, CompressOptions, CompressResult};
-pub use sanitize::sanitize_pdf;
+pub use annotations::remove_annotations;
+pub use compress::{
+    compress_pdf, compress_pdf_from_bytes, compress_pdf_with_options, CompressOptions,
+    CompressResult,
+};
 pub use extract::{extract_images, ExtractedImage};
+pub use merge::{merge_pdfs, merge_pdfs_from_bytes};
+pub use redact::{apply_redactions, RedactionRect};
+pub use sanitize::sanitize_pdf;
+pub use split::{split_pdf, split_pdf_from_bytes};
+pub use watermark::{apply_text_watermark, WatermarkColor, WatermarkOptions};
 
 use std::fmt;
 
