@@ -112,11 +112,9 @@ fn watermark_survives_reload() {
                     found_identity_h = true;
                 }
             }
-            Object::Stream(s) => {
-                // The /FontFile2 stream carries /Length1 = original TTF size.
-                if s.dict.get(b"Length1").is_ok() {
-                    found_font_file = true;
-                }
+            // The /FontFile2 stream carries /Length1 = original TTF size.
+            Object::Stream(s) if s.dict.get(b"Length1").is_ok() => {
+                found_font_file = true;
             }
             _ => {}
         }

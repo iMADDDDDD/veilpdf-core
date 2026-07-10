@@ -1,243 +1,269 @@
 <p align="center">
-  <img src="icon.png" alt="VeilPDF" width="128" height="128">
+  <a href="https://veilpdf.com">
+    <img src="icon.png" alt="VeilPDF" width="128" height="128">
+  </a>
 </p>
 
 <h1 align="center">veilpdf-core</h1>
 
 <p align="center">
-  <strong>Privacy-first PDF engine. Your documents never leave your machine.</strong>
+  <strong>An auditable, offline PDF engine written in Rust.</strong>
 </p>
 
 <p align="center">
-  Merge &middot; Split &middot; Compress &middot; Sanitize &middot; Extract &middot; Watermark &middot; Redact<br>
-  <sub>Pure Rust &middot; No network code &middot; MIT licensed</sub>
+  Merge, split, compress, sanitize, extract, watermark, and redact PDFs<br>
+  without accounts, cloud services, or network dependencies.
 </p>
 
 <p align="center">
   <a href="https://github.com/iMADDDDDD/veilpdf-core/actions/workflows/ci.yml"><img src="https://github.com/iMADDDDDD/veilpdf-core/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
   <a href="LICENSE-MIT"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT"></a>
-  <img src="https://img.shields.io/badge/network-zero-brightgreen.svg" alt="Network: zero">
-  <img src="https://img.shields.io/badge/unsafe-FFI%20boundary%20only-blue.svg" alt="Unsafe: FFI boundary only">
+  <img src="https://img.shields.io/badge/Rust-stable-black.svg" alt="Rust: stable">
+  <img src="https://img.shields.io/badge/network-none-brightgreen.svg" alt="Network dependencies: none">
+</p>
+
+<p align="center">
+  <a href="https://veilpdf.com">Website</a> &middot;
+  <a href="#quick-start">Quick start</a> &middot;
+  <a href="#operations">Operations</a> &middot;
+  <a href="#security-model">Security model</a> &middot;
+  <a href="#c-ffi">C FFI</a>
 </p>
 
 ---
 
-## At a glance
+`veilpdf-core` is the document-processing engine behind
+[VeilPDF](https://veilpdf.com), a native macOS app with 47 PDF tools. The core
+is published separately under the MIT license so its handling of raw document
+bytes can be inspected, tested, and embedded independently of the app.
 
-- **Zero networking.** No `reqwest`, no `hyper`, no sockets. Cannot phone home by construction.
-- **Focused dependency set.** PDF object rewriting, JPEG/PNG handling, bounded deflate, and font shaping/subsetting only.
-- **Auditable core.** The byte-level document engine is separate from the proprietary macOS app.
-- **Hostile-input safe.** Encrypted PDFs rejected, zip bombs capped, megapixel-bombed images rejected, FFI panics contained.
-- **Rust + C ABI.** Use as a Rust crate or link the static `.a` from Swift, Objective-C, or C.
+## Why this exists
 
-## Why
+PDFs often contain contracts, financial records, identity documents, and other
+sensitive data. A PDF engine should not need an account, an HTTP client, or a
+cloud SDK to transform those files.
 
-Most PDF libraries pull in HTTP clients, async runtimes, or cloud SDKs. If you're processing sensitive documents — tax returns, contracts, medical records — that's a liability.
+This crate keeps that boundary deliberately small:
 
-`veilpdf-core` is the engine behind [VeilPDF](https://veilpdf.com) on the Mac App Store. The app is closed source; this crate is the byte-level engine, open-sourced so anyone can audit what actually happens to your files.
+- **No networking:** no HTTP client, TLS stack, socket use, analytics, or cloud SDK.
+- **Native Rust API:** use the engine directly from Rust.
+- **C ABI:** build a static library for Swift, Objective-C, C, or other FFI hosts.
+- **Defensive parsing:** reject encrypted documents and bound expensive object, stream, image, and input sizes.
+- **Auditable scope:** the repository contains the byte-level engine, tests, fixtures, and CI needed to review it.
 
-## Operations
+The no-network guarantee applies to this crate. An application embedding the
+library may still perform its own networking outside `veilpdf-core`.
 
-| Operation | What it does | Notes |
-|-----------|-------------|-------|
-| **Merge** | Combine multiple PDFs into one | Preserves inherited page attributes (MediaBox, Resources) |
-| **Split** | Extract each page as a standalone PDF | Same inheritance handling as merge |
-| **Compress** | Reduce file size | JPEG recompression with ColorSpace classification; SMask/Mask images preserved |
-| **Sanitize** | Strip dangerous content | Always removes JS, actions, embedded files; optional XMP and `/Info` sweep |
-| **Extract** | Pull images out of a PDF | JPEG passthrough; FlateDecode → PNG |
-| **Watermark** | Bake text watermarks into pages | Embedded subsetted TrueType fonts, opacity, rotation, Unicode shaping |
-| **Redact** | Apply page-space redaction rectangles | Removes covered text bytes and paints vector redaction boxes |
-| **Annotations** | Remove selected annotation classes | Preserves form widgets while filtering notes, drawings, stamps, links, etc. |
+## Quick start
 
-## Hostile-input defenses
-
-- **Encrypted PDF rejection** — password-protected files return a clear error instead of silently producing garbage.
-- **Object-count cap** — 500,000-object ceiling blocks object-stream amplification attacks that would otherwise hang every downstream operation.
-- **Bounded decompression** — 256 MB limit on deflate streams, driven by `flate2` (lopdf's built-in `decompress` silently fails on real-world files).
-- **Image decode cap** — 100 megapixel limit on decoded images stops OOM-style malicious streams.
-- **FFI panic safety** — every C entry point wrapped in `catch_unwind`; panics cannot unwind into foreign code.
-- **Input size cap** — 512 MB per document at the FFI boundary.
-- **Sanitize safety baseline** — JS, action chains, and embedded files are *always* stripped by `sanitize_pdf`, regardless of flags. Callers can add sweeps but cannot opt out.
-
-## Quick start (Rust)
+The crate is currently distributed from GitHub:
 
 ```toml
 [dependencies]
-veilpdf-core = { git = "https://github.com/iMADDDDDD/veilpdf-core" }
+veilpdf-core = { git = "https://github.com/iMADDDDDD/veilpdf-core", branch = "main" }
 ```
+
+Pin a commit with `rev` when reproducible builds are required.
 
 ```rust
-use veilpdf_core::{merge_pdfs, split_pdf, compress_pdf};
+use veilpdf_core::{compress_pdf, merge_pdfs, split_pdf};
 
-// Merge
-let merged = merge_pdfs(&["a.pdf", "b.pdf"]).unwrap();
-std::fs::write("merged.pdf", merged).unwrap();
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let merged = merge_pdfs(&["chapter-1.pdf", "chapter-2.pdf"])?;
+    std::fs::write("book.pdf", merged)?;
 
-// Split into individual pages
-let pages = split_pdf("document.pdf").unwrap();
-for (i, page) in pages.iter().enumerate() {
-    std::fs::write(format!("page_{}.pdf", i + 1), page).unwrap();
+    let pages = split_pdf("book.pdf")?;
+    for (index, page) in pages.iter().enumerate() {
+        std::fs::write(format!("page-{}.pdf", index + 1), page)?;
+    }
+
+    let compressed = compress_pdf("book.pdf")?;
+    std::fs::write("book-small.pdf", compressed.data)?;
+
+    println!("Reduced by {:.1}%", compressed.reduction_percent);
+    Ok(())
 }
-
-// Compress
-let result = compress_pdf("large.pdf").unwrap();
-std::fs::write("small.pdf", result.data).unwrap();
-println!("Reduced by {:.1}%", result.reduction_percent);
 ```
 
-<details>
-<summary><strong>Advanced compression options</strong></summary>
+The public API also provides byte-slice variants for hosts that do not want the
+core to open files directly.
+
+## Operations
+
+| Operation | Rust API | Behavior |
+| --- | --- | --- |
+| Merge | `merge_pdfs`, `merge_pdfs_from_bytes` | Combines documents while preserving inherited page attributes |
+| Split | `split_pdf`, `split_pdf_from_bytes` | Exports each page as an independent PDF |
+| Compress | `compress_pdf`, `compress_pdf_with_options` | Recompresses and downsamples supported image streams |
+| Sanitize | `sanitize_pdf` | Removes JavaScript, actions, embedded files, and optional metadata |
+| Extract images | `extract_images` | Passes JPEGs through and converts supported Flate streams to PNG |
+| Watermark | `apply_text_watermark` | Adds shaped Unicode text using an embedded subsetted TrueType font |
+| Redact | `apply_redactions` | Removes covered text bytes and paints page-space redaction rectangles |
+| Remove annotations | `remove_annotations` | Filters selected annotation classes while preserving form widgets |
+
+### Compression options
 
 ```rust
 use veilpdf_core::{compress_pdf_with_options, CompressOptions};
 
-let data = std::fs::read("input.pdf").unwrap();
-let result = compress_pdf_with_options(&data, &CompressOptions {
-    image_quality: 60,          // JPEG quality (1-100)
-    max_image_dimension: 1600,  // Downscale images larger than this
-    target_dpi: 120,            // DPI-aware downsampling; 0 disables it
-    strip_metadata: true,       // Remove author, creation date, XMP, thumbnails
-}).unwrap();
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let input = std::fs::read("input.pdf")?;
+    let result = compress_pdf_with_options(
+        &input,
+        &CompressOptions {
+            image_quality: 60,
+            max_image_dimension: 1600,
+            target_dpi: 120,
+            strip_metadata: true,
+        },
+    )?;
 
-println!("{:.1} MB -> {:.1} MB ({:.1}% reduction)",
-    result.input_size as f64 / 1_048_576.0,
-    result.output_size as f64 / 1_048_576.0,
-    result.reduction_percent);
-```
-
-</details>
-
-<details>
-<summary><strong>Sanitize untrusted PDFs</strong></summary>
-
-```rust
-use veilpdf_core::sanitize::{sanitize_pdf, FLAG_REMOVE_JS, FLAG_REMOVE_ACTIONS, FLAG_STRIP_METADATA};
-
-let data = std::fs::read("untrusted.pdf").unwrap();
-let clean = sanitize_pdf(&data, FLAG_REMOVE_JS | FLAG_REMOVE_ACTIONS | FLAG_STRIP_METADATA).unwrap();
-std::fs::write("clean.pdf", clean).unwrap();
-```
-
-| Flag | Removes |
-|------|---------|
-| `FLAG_STRIP_METADATA` | `/Info` dict (author, title, creation date, producer) |
-| `FLAG_REMOVE_JS` | `/JS`, `/JavaScript`, and named-JavaScript destinations |
-| `FLAG_REMOVE_EMBEDDED` | `/EmbeddedFiles` and `/FileAttachment` annotations |
-| `FLAG_REMOVE_ACTIONS` | `/OpenAction`, `/AA`, and link-annotation actions |
-| `FLAG_REMOVE_XMP` | `/Metadata` streams (both `/Type /Metadata` and `/Subtype /XML`) |
-
-JS, actions, and embedded files are stripped unconditionally — the flags argument only *adds* sweeps, never opts out of the safety baseline.
-
-</details>
-
-<details>
-<summary><strong>Extract images</strong></summary>
-
-```rust
-use veilpdf_core::extract_images;
-
-let data = std::fs::read("document.pdf").unwrap();
-let images = extract_images(&data).unwrap();
-for (i, img) in images.iter().enumerate() {
-    let ext = if img.format == 0 { "jpg" } else { "png" };
-    std::fs::write(format!("image_{}.{}", i + 1, ext), &img.data).unwrap();
-    println!("{}x{} {}", img.width, img.height, ext.to_uppercase());
+    std::fs::write("output.pdf", result.data)?;
+    Ok(())
 }
 ```
 
-JPEG (`DCTDecode`) images are passed through unchanged. Flate-compressed images are decoded and re-encoded as PNG.
+### Sanitizing untrusted PDFs
 
-</details>
+```rust
+use veilpdf_core::sanitize::{
+    sanitize_pdf, FLAG_REMOVE_ACTIONS, FLAG_REMOVE_JS, FLAG_STRIP_METADATA,
+};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let input = std::fs::read("untrusted.pdf")?;
+    let output = sanitize_pdf(
+        &input,
+        FLAG_REMOVE_JS | FLAG_REMOVE_ACTIONS | FLAG_STRIP_METADATA,
+    )?;
+    std::fs::write("sanitized.pdf", output)?;
+    Ok(())
+}
+```
+
+| Flag | Additional sweep |
+| --- | --- |
+| `FLAG_STRIP_METADATA` | Removes the `/Info` dictionary |
+| `FLAG_REMOVE_JS` | Removes JavaScript entries and named JavaScript destinations |
+| `FLAG_REMOVE_EMBEDDED` | Removes embedded-file trees and file-attachment annotations |
+| `FLAG_REMOVE_ACTIONS` | Removes document, page, and annotation action chains |
+| `FLAG_REMOVE_XMP` | Removes XMP metadata streams |
+
+JavaScript, actions, and embedded files are always removed by `sanitize_pdf`.
+Flags add further sweeps; they do not disable the safety baseline.
+
+## Security model
+
+`veilpdf-core` treats every input document as untrusted.
+
+| Defense | Limit or behavior |
+| --- | --- |
+| Encrypted documents | Rejected with a typed error |
+| Input at the FFI boundary | 512 MB maximum per document |
+| PDF object count | 500,000 objects maximum |
+| Deflate streams | 256 MB decompressed maximum |
+| Decoded images | 100 megapixels maximum |
+| FFI panics | Contained with `catch_unwind` |
+| Sanitization baseline | JavaScript, action chains, and embedded files always removed |
+
+These controls reduce resource-exhaustion and parser-abuse risk; they are not a
+claim that arbitrary PDFs are harmless. Please include a minimal reproducer
+when reporting a malformed-document bug. Do not attach sensitive documents to
+public issues.
+
+## Architecture
+
+```text
+Rust or host application
+          |
+          | Rust API or C ABI
+          v
++--------------------------------------------------+
+|                  veilpdf-core                    |
+|--------------------------------------------------|
+| merge | split | compress | sanitize | extract   |
+| watermark | redact | annotation filtering       |
+|--------------------------------------------------|
+| input limits | encrypted-PDF rejection          |
+| bounded decompression | panic containment        |
++--------------------------------------------------+
+          |
+          v
+     PDF output bytes
+```
+
+The focused dependency set is visible in [`Cargo.toml`](Cargo.toml):
+
+| Crate | Purpose |
+| --- | --- |
+| [`lopdf`](https://crates.io/crates/lopdf) | PDF objects, page trees, and serialization |
+| [`image`](https://crates.io/crates/image) | JPEG and PNG decoding/encoding |
+| [`flate2`](https://crates.io/crates/flate2) | Bounded deflate decompression |
+| [`ttf-parser`](https://crates.io/crates/ttf-parser) | TrueType metrics |
+| [`subsetter`](https://crates.io/crates/subsetter) | Embedded font subsetting |
+| [`rustybuzz`](https://crates.io/crates/rustybuzz) | Unicode text shaping |
+| [`unicode-bidi`](https://crates.io/crates/unicode-bidi) | Bidirectional text ordering |
+
+There is no async runtime, TLS client, serialization framework, or networking
+crate in the dependency graph.
 
 ## C FFI
 
-The crate builds as a static library (`libveilpdf_core.a`) and exposes a C ABI for embedding in Swift, Objective-C, C, or any language with C interop.
-
-```c
-VeilBuffer veil_merge(const uint8_t *a, size_t a_len, const uint8_t *b, size_t b_len);
-VeilBuffer veil_split(const uint8_t *ptr, size_t len);
-VeilBuffer veil_compress(const uint8_t *ptr, size_t len);
-VeilBuffer veil_compress_ex(const uint8_t *ptr, size_t len,
-                            uint8_t quality, uint32_t max_dim,
-                            uint32_t target_dpi, uint8_t strip_meta);
-VeilBuffer veil_sanitize(const uint8_t *ptr, size_t len, uint32_t flags);
-VeilBuffer veil_remove_annotations(const uint8_t *ptr, size_t len, uint32_t flags);
-VeilBuffer veil_extract_images(const uint8_t *ptr, size_t len);
-VeilBuffer veil_apply_watermark(const uint8_t *ptr, size_t len, ...);
-VeilBuffer veil_apply_redactions(const uint8_t *ptr, size_t len, ...);
-void veil_free_buffer(VeilBuffer buf);
-```
+The crate builds both an `rlib` and a static library:
 
 ```bash
 cargo build --release
 # target/release/libveilpdf_core.a
 ```
 
-Every FFI entry point is wrapped in `catch_unwind`. Panics cannot cross the boundary.
+The C ABI exposes merge, split, compression, sanitization, annotation removal,
+image extraction, watermarking, and redaction entry points. See
+[`src/ffi.rs`](src/ffi.rs) for the `#[repr(C)]` types and authoritative function
+signatures.
 
-## Architecture
-
-```
-┌──────────────────────────────────────────────────────────┐
-│                    veilpdf-core  (MIT)                    │
-├──────────────────────────────────────────────────────────┤
-│   merge      split      compress     sanitize    extract  │
-│   lopdf      lopdf      lopdf        lopdf       lopdf    │
-│                         image                    image    │
-│                         flate2                            │
-├──────────────────────────────────────────────────────────┤
-│   limits  ·  encrypted-PDF rejection  ·  object-count cap │
-├──────────────────────────────────────────────────────────┤
-│     ffi   ·   C ABI   ·   catch_unwind   ·   unwind       │
-└──────────────────────────────────────────────────────────┘
-```
-
-### Dependencies
-
-| Crate | Version | Purpose |
-|-------|---------|---------|
-| [lopdf](https://crates.io/crates/lopdf) | 0.34 | Pure-Rust PDF object manipulation — page trees, object remapping |
-| [image](https://crates.io/crates/image) | 0.25 | JPEG + PNG codecs (minimal feature flags) for recompression |
-| [flate2](https://crates.io/crates/flate2) | 1 | Bounded deflate decompression that rejects zip bombs |
-| [ttf-parser](https://crates.io/crates/ttf-parser) | 0.25 | TrueType metrics for embedded watermark fonts |
-| [subsetter](https://crates.io/crates/subsetter) | 0.2 | Font subsetting so watermarks do not embed full font files |
-| [unicode-bidi](https://crates.io/crates/unicode-bidi) | 0.3 | Bidirectional text ordering before shaping |
-| [rustybuzz](https://crates.io/crates/rustybuzz) | 0.20 | Pure-Rust text shaping for watermark glyph streams |
-
-No async runtime. No TLS client. No serialization framework. No network of any kind.
+Every exported operation catches Rust panics before returning to foreign code.
+Buffers returned through the ABI must be released with `veil_free_buffer`.
 
 ## Development
 
+Install the current stable Rust toolchain, clone the repository, and run:
+
 ```bash
-cargo build --release          # static lib + rlib
-cargo test --release           # full test suite
-cargo clippy -- -D warnings    # lint strict
-cargo doc --open               # browse the public API
+cargo build --release
+cargo test --release
+cargo clippy --all-targets --release -- -D warnings
+cargo fmt --all -- --check
 ```
 
-> **On `panic = "unwind"`**
->
-> The release profile in `Cargo.toml` pins `panic = "unwind"` because `ffi.rs` uses `catch_unwind` to contain panics at the C boundary. Switching to `panic = "abort"` silently removes that safety guarantee — don't.
+The release profile intentionally uses `panic = "unwind"`. The FFI layer relies
+on unwinding to contain panics with `catch_unwind`; changing it to `abort` would
+remove that boundary.
 
-## The macOS app
+## Relationship to the VeilPDF app
 
-This crate is the byte-level engine of [**VeilPDF**](https://veilpdf.com) — a native macOS app with 47 PDF tools, one-time $29 on the Mac App Store. The app layers a proprietary macOS interface and additional native workflows on top of this engine using Apple's own frameworks:
+[VeilPDF](https://veilpdf.com) is a native macOS application with 47 PDF tools.
+It offers a free three-day trial, followed by a $29 one-time purchase with no
+subscription.
 
-- **PDFKit** — page organization, rotation, annotations, form filling, signatures, stamps, watermarks, page numbers, passwords, permissions, bookmarks, metadata, flattening, diffing, repair
-- **Core Image** — contrast, scanner effect, color replacement
-- **WebKit** — HTML to PDF
-- **NSAttributedString** — Markdown to PDF
-
-The app source is proprietary; this crate — the part that touches your raw document bytes — is the auditable open-source trust layer.
+The app adds a proprietary SwiftUI interface and workflows implemented with
+Apple frameworks such as PDFKit, Core Image, WebKit, and NSAttributedString.
+This repository contains the MIT-licensed Rust engine responsible for its
+low-level PDF byte processing; it is not the complete application source.
 
 ## Contributing
 
-The surface is intentionally small. Bug fixes, safety hardening, and test coverage for existing operations are welcome. Before opening a PR:
+Bug fixes, security hardening, compatibility improvements, and focused test
+coverage are welcome. For substantial changes, open an issue first so the scope
+and API impact can be discussed.
 
-```bash
-cargo test --release && cargo clippy -- -D warnings
-```
+Before opening a pull request, run the commands in [Development](#development).
+CI checks release builds and tests on Linux and macOS, plus strict Clippy on
+stable Rust.
+
+Use [GitHub Issues](https://github.com/iMADDDDDD/veilpdf-core/issues) for bugs
+and feature proposals. Never upload confidential PDFs; reduce a failing file to
+a nonsensitive fixture whenever possible.
 
 ## License
 
-MIT — see [LICENSE-MIT](LICENSE-MIT).
+`veilpdf-core` is available under the [MIT License](LICENSE-MIT).
